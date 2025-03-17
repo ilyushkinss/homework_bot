@@ -28,37 +28,48 @@ HOMEWORK_VERDICTS = {
 }
 
 
-# logging.basicConfig(
-#     format=('%(asctime)s - %(levelname)s '
-#             '- %(message)s - %(funcName)s - %(lineno)d'),
-#     level=logging.DEBUG,
-#     filename='logs.log',
-#     encoding='utf-8',
-#     handlers=
-# )
-logging.basicConfig(
-    level=logging.DEBUG,
-    filename='logs.log',
-    format=('%(asctime)s - %(levelname)s '
-            '- %(message)s - %(funcName)s - %(lineno)d'),
-)
+def setup_logger():
+    """Создание логгера."""
+    log_format = ('%(asctime)s - %(levelname)s - %(message)s'
+                  '- %(funcName)s - %(lineno)d')
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-handler = logging.StreamHandler(stream=sys.stdout)
-logger.addHandler(handler)
+    logging.basicConfig(
+        level=logging.DEBUG,
+        filename='logs.log',
+        format=log_format,
+    )
+
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+
+    console_handler = logging.StreamHandler(stream=sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(logging.Formatter(log_format))
+    logger.addHandler(console_handler)
+
+    return logger
+
+
+# if __name__ == '__main__':
+#     logger = setup_logger()
+logger = setup_logger()
 
 
 def check_tokens():
     """Проверяет доступность переменных окружения."""
-    tokens = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
-    tokens_names = ['PRACTICUM_TOKEN', 'TELEGRAM_TOKEN', 'TELEGRAM_CHAT_ID']
-    for i in range(len(tokens)):
-        if not tokens[i]:
+    tokens = {
+        'PRACTICUM_TOKEN': PRACTICUM_TOKEN,
+        'TELEGRAM_TOKEN': TELEGRAM_TOKEN,
+        'TELEGRAM_CHAT_ID': TELEGRAM_CHAT_ID
+    }
+    tok = True
+    for token in tokens:
+        if not tokens[token]:
+            tok = False
             logger.critical(
-                f'Некорректные переменные окружения: {tokens_names[i]}'
+                f'Некорректные переменные окружения: {token}'
             )
-    return all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID])
+    return tok
 
 
 def send_message(bot, message):
@@ -83,7 +94,7 @@ def get_api_answer(timestamp):
         )
     except Exception as error:
         raise exceptions.EndpointException(
-            f'Эндпоинт {ENDPOINT} недоступен: {error}'
+            f'Эндпоинт {ENDPOINT} недоступен: {error}. Время: {timestamp}'
         )
 
     if homework_statuses.status_code != HTTPStatus.OK:
@@ -101,14 +112,19 @@ def get_api_answer(timestamp):
 
 def check_response(response):
     """Проверяет ответ API на соответствие."""
-    if isinstance(response, dict) is not True:
-        raise TypeError('Тип данных в ответе API не соответствует ожидаемому')
+    if not isinstance(response, dict):
+        raise TypeError(
+            ('Тип данных в ответе API не соответствует ожидаемому.'
+             f' Ожидался тип "dict", в ответе тип "{type(response)}".')
+        )
 
     if 'homeworks' not in response:
-        raise exceptions.ResponseException('Ключ "homeworks" отсутствует')
+        raise exceptions.ResponseException(
+            'Ключ "homeworks" отсутствует в коллекции "response".'
+        )
 
     homeworks_list = response['homeworks']
-    if isinstance(homeworks_list, list) is not True:
+    if not isinstance(homeworks_list, list):
         raise TypeError(
             'Тип данных "homeworks_list" не соответствует ожидаемому'
         )
@@ -119,20 +135,22 @@ def check_response(response):
 def parse_status(homework):
     """Извлекает статус конкретной домашки."""
     if 'homework_name' not in homework:
-        raise KeyError('Ключ "homework_name" недоступен')
+        raise KeyError(
+            'Ключ "homework_name" отсутствует в коллекции "homework".'
+        )
 
     if 'status' not in homework:
         raise KeyError('Ключ "status" недоступен')
 
     homework_name = homework['homework_name']
     homework_status = homework['status']
-    if homework_status in HOMEWORK_VERDICTS:
-        verdict = HOMEWORK_VERDICTS[homework_status]
-        return f'Изменился статус проверки работы "{homework_name}". {verdict}'
-    else:
+    if homework_status not in HOMEWORK_VERDICTS:
         raise exceptions.ParseException(
             f'Неизвестный статус работы {homework_name}'
         )
+    else:
+        verdict = HOMEWORK_VERDICTS[homework_status]
+        return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
 def main():
@@ -156,7 +174,7 @@ def main():
                 timestamp = int(time.time())
                 current_status = homework_status
         except Exception as error:
-            logger.error(f'{str(error)}')
+            logger.error(f'Сбой в работе программы: {str(error)}')
             send_message(bot, f'{str(error)}')
         finally:
             time.sleep(RETRY_PERIOD)
