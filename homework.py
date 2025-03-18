@@ -55,14 +55,14 @@ def check_tokens():
         'TELEGRAM_TOKEN': TELEGRAM_TOKEN,
         'TELEGRAM_CHAT_ID': TELEGRAM_CHAT_ID
     }
-    token_issue = True
+    tokens_availability = True
     for token in tokens:
         if not tokens[token]:
-            token_issue = False
+            tokens_availability = False
             logger.critical(
                 f'Некорректные переменные окружения: {token}'
             )
-    return token_issue
+    return tokens_availability
 
 
 def send_message(bot, message):
