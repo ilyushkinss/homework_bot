@@ -27,32 +27,25 @@ HOMEWORK_VERDICTS = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
+log_format = ('%(asctime)s - %(levelname)s'
+              ' - %(message)s - %(funcName)s - %(lineno)d')
 
-def setup_logger():
-    """Создание логгера."""
-    log_format = ('%(asctime)s - %(levelname)s - %(message)s'
-                  '- %(funcName)s - %(lineno)d')
+log_file = os.path.join(os.path.dirname(__file__), 'logs.log')
 
-    logging.basicConfig(
-        level=logging.DEBUG,
-        filename='logs.log',
-        format=log_format,
-    )
+logging.basicConfig(
+    level=logging.DEBUG,
+    format=log_format,
+    handlers=[
+        logging.FileHandler(log_file),
+        logging.StreamHandler(sys.stdout),
+    ]
+)
 
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
-    console_handler = logging.StreamHandler(stream=sys.stdout)
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(logging.Formatter(log_format))
-    logger.addHandler(console_handler)
-
-    return logger
-
-
-# if __name__ == '__main__':
-#     logger = setup_logger()
-logger = setup_logger()
+if __name__ == '__main__':
+    logger.info("Логгер настроен и готов к использованию.")
 
 
 def check_tokens():
@@ -62,14 +55,14 @@ def check_tokens():
         'TELEGRAM_TOKEN': TELEGRAM_TOKEN,
         'TELEGRAM_CHAT_ID': TELEGRAM_CHAT_ID
     }
-    tok = True
+    token_issue = True
     for token in tokens:
         if not tokens[token]:
-            tok = False
+            token_issue = False
             logger.critical(
                 f'Некорректные переменные окружения: {token}'
             )
-    return tok
+    return token_issue
 
 
 def send_message(bot, message):
@@ -123,13 +116,14 @@ def check_response(response):
             'Ключ "homeworks" отсутствует в коллекции "response".'
         )
 
-    homeworks_list = response['homeworks']
-    if not isinstance(homeworks_list, list):
+    homeworks = response['homeworks']
+    if not isinstance(homeworks, list):
         raise TypeError(
-            'Тип данных "homeworks_list" не соответствует ожидаемому'
+            ('Тип данных "homeworks" не соответствует ожидаемому.'
+             f' Ожидался тип "dict", в ответе тип "{type(homeworks)}".')
         )
 
-    return homeworks_list
+    return homeworks
 
 
 def parse_status(homework):
@@ -140,7 +134,9 @@ def parse_status(homework):
         )
 
     if 'status' not in homework:
-        raise KeyError('Ключ "status" недоступен')
+        raise KeyError(
+            'Ключ "status" отсутствует в коллекции "homework".'
+        )
 
     homework_name = homework['homework_name']
     homework_status = homework['status']
@@ -148,9 +144,8 @@ def parse_status(homework):
         raise exceptions.ParseException(
             f'Неизвестный статус работы {homework_name}'
         )
-    else:
-        verdict = HOMEWORK_VERDICTS[homework_status]
-        return f'Изменился статус проверки работы "{homework_name}". {verdict}'
+    verdict = HOMEWORK_VERDICTS[homework_status]
+    return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
 def main():
@@ -161,6 +156,7 @@ def main():
     bot = telebot.TeleBot(token=TELEGRAM_TOKEN)
     timestamp = 0
     current_status = ''
+    last_error = None
     while True:
         try:
             response = get_api_answer(timestamp)
@@ -174,8 +170,11 @@ def main():
                 timestamp = int(time.time())
                 current_status = homework_status
         except Exception as error:
-            logger.error(f'Сбой в работе программы: {str(error)}')
-            send_message(bot, f'{str(error)}')
+            error_message = str(error)
+            logger.error(f'Сбой в работе программы: {error_message}')
+            if last_error != error_message:
+                send_message(bot, f'Сбой в работе программы: {error_message}')
+                last_error = error_message
         finally:
             time.sleep(RETRY_PERIOD)
 
