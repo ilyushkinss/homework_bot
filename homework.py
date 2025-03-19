@@ -19,6 +19,7 @@ TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 RETRY_PERIOD = 600
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
+ERROR_NOTIFICATION_INTERVAL = 3600
 
 
 HOMEWORK_VERDICTS = {
@@ -27,25 +28,20 @@ HOMEWORK_VERDICTS = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
-log_format = ('%(asctime)s - %(levelname)s'
-              ' - %(message)s - %(funcName)s - %(lineno)d')
-
-log_file = os.path.join(os.path.dirname(__file__), 'logs.log')
-
 logging.basicConfig(
     level=logging.DEBUG,
-    format=log_format,
+    encoding='utf-8',
+    format=('%(asctime)s - %(levelname)s'
+            ' - %(message)s - %(funcName)s - %(lineno)d'),
     handlers=[
-        logging.FileHandler(log_file),
+        logging.FileHandler(
+            os.path.join(os.path.dirname(__file__), 'logs.log')
+        ),
         logging.StreamHandler(sys.stdout),
     ]
 )
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
-if __name__ == '__main__':
-    logger.info("Логгер настроен и готов к использованию.")
 
 
 def check_tokens():
@@ -120,7 +116,7 @@ def check_response(response):
     if not isinstance(homeworks, list):
         raise TypeError(
             ('Тип данных "homeworks" не соответствует ожидаемому.'
-             f' Ожидался тип "dict", в ответе тип "{type(homeworks)}".')
+             f' Ожидался тип "list", в ответе тип "{type(homeworks)}".')
         )
 
     return homeworks
@@ -142,7 +138,7 @@ def parse_status(homework):
     homework_status = homework['status']
     if homework_status not in HOMEWORK_VERDICTS:
         raise exceptions.ParseException(
-            f'Неизвестный статус работы {homework_name}'
+            f'Неизвестный статус работы {homework_name}: {homework_status}.'
         )
     verdict = HOMEWORK_VERDICTS[homework_status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
@@ -157,6 +153,7 @@ def main():
     timestamp = 0
     current_status = ''
     last_error = None
+    last_error_time = 0
     while True:
         try:
             response = get_api_answer(timestamp)
@@ -171,13 +168,20 @@ def main():
                 current_status = homework_status
         except Exception as error:
             error_message = str(error)
+            current_time = time.time()
             logger.error(f'Сбой в работе программы: {error_message}')
-            if last_error != error_message:
+            if last_error != error_message or (
+                    current_time - last_error_time
+            ) > ERROR_NOTIFICATION_INTERVAL:
                 send_message(bot, f'Сбой в работе программы: {error_message}')
                 last_error = error_message
+                last_error_time = current_time
         finally:
             time.sleep(RETRY_PERIOD)
 
+
+if __name__ == '__main__':
+    logger.info("Логгер настроен и готов к использованию.")
 
 if __name__ == '__main__':
     main()
