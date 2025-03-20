@@ -28,21 +28,6 @@ HOMEWORK_VERDICTS = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    encoding='utf-8',
-    format=('%(asctime)s - %(levelname)s'
-            ' - %(message)s - %(funcName)s - %(lineno)d'),
-    handlers=[
-        logging.FileHandler(
-            os.path.join(os.path.dirname(__file__), 'logs.log')
-        ),
-        logging.StreamHandler(sys.stdout),
-    ]
-)
-
-logger = logging.getLogger(__name__)
-
 
 def check_tokens():
     """Проверяет доступность переменных окружения."""
@@ -55,7 +40,7 @@ def check_tokens():
     for token in tokens:
         if not tokens[token]:
             tokens_availability = False
-            logger.critical(
+            logging.critical(
                 f'Некорректные переменные окружения: {token}'
             )
     return tokens_availability
@@ -67,6 +52,7 @@ def send_message(bot, message):
         logging.debug(f'Отправлено сообщение: "{message}"')
         return bot.send_message(TELEGRAM_CHAT_ID, message)
     except Exception as error:
+        logging.error(f'Ошибка отправки сообщения: {error}')
         raise exceptions.MessageError(
             f'Боту не удалось отправить сообщение: "{error}"'
         )
@@ -151,9 +137,7 @@ def main():
 
     bot = telebot.TeleBot(token=TELEGRAM_TOKEN)
     timestamp = 0
-    current_status = ''
-    last_error = None
-    last_error_time = 0
+    current_status = {'message': '', 'time': 0}
     while True:
         try:
             response = get_api_answer(timestamp)
@@ -162,26 +146,41 @@ def main():
                 logging.debug('Статус не обновлен')
                 continue
             homework_status = parse_status(homework[0])
-            if current_status != homework_status:
+            if current_status['message'] != homework_status:
                 send_message(bot, homework_status)
                 timestamp = int(time.time())
-                current_status = homework_status
+                current_status = {
+                    'message': homework_status,
+                    'time': time.time()
+                }
         except Exception as error:
-            error_message = str(error)
+            error_message = f'Сбой в работе программы: {error}'
             current_time = time.time()
-            logger.error(f'Сбой в работе программы: {error_message}')
-            if last_error != error_message or (
-                    current_time - last_error_time
+            logging.error(error_message)
+            if current_status['message'] != error_message or (
+                    current_time - current_status['time']
             ) > ERROR_NOTIFICATION_INTERVAL:
-                send_message(bot, f'Сбой в работе программы: {error_message}')
-                last_error = error_message
-                last_error_time = current_time
+                send_message(bot, error_message)
+                current_status = {
+                    'message': error_message,
+                    'time': current_time
+                }
         finally:
             time.sleep(RETRY_PERIOD)
 
 
 if __name__ == '__main__':
-    logger.info("Логгер настроен и готов к использованию.")
+    logging.basicConfig(
+        level=logging.DEBUG,
+        encoding='utf-8',
+        format=('%(asctime)s - %(levelname)s'
+                ' - %(message)s - %(funcName)s - %(lineno)d'),
+        handlers=[
+            logging.FileHandler(
+                os.path.join(os.path.dirname(__file__), 'logs.log')
+            ),
+            logging.StreamHandler(sys.stdout),
+        ]
+    )
 
-if __name__ == '__main__':
     main()
