@@ -1,4 +1,4 @@
-![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54) ![Pygame](https://img.shields.io/badge/pygame-%23000000.svg?style=for-the-badge&logo=pygame&logoColor=white)
+![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
 ![pyTelegramBotAPI](https://img.shields.io/badge/pyTelegramBotAPI-%23000000.svg?style=for-the-badge&logo=telegram&logoColor=white)
 
 # Телеграм бот Яндекс.Домашка 
